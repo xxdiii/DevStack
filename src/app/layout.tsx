@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 import { cn } from "@/lib/utils";
 import Header from "./components/Header";
 export const metadata: Metadata = {
-  title: "RiverFlow",
+  title: "DevStack",
   description: "Created by Aadithya Suresh",
 };
 

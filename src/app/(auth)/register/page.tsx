@@ -78,15 +78,15 @@ function RegisterPage(){
         <div className="flex min-h-screen items-center justify-center px-4 py-16">
         <div className="mx-auto w-full max-w-md rounded-none border border-solid border-white/30 bg-white p-4 shadow-input dark:bg-black md:rounded-2xl md:p-8 flex flex-col justify-center items-center">
             <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200">
-                Welcome to Riverflow
+                Welcome to DevStack
             </h2>
             <p className="mt-2 max-w-sm text-sm text-neutral-600 dark:text-neutral-300">
-                Signup with riverflow if you you don&apos;t have an account.
+                Signup with DevStack if you you don&apos;t have an account.
                 <br /> If you already have an account,{" "}
                 <Link href="/login" className="text-orange-500 hover:underline">
                     login
                 </Link>{" "}
-                to riverflow
+                to DevStack
             </p>
 
             {error && (

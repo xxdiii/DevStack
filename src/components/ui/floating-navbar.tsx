@@ -56,7 +56,7 @@ export const FloatingNav = ({
         animate={{ y: visible ? 0 : -100, opacity: visible ? 1 : 0 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          "flex max-w-fit fixed top-10 inset-x-0 mx-auto z-[5000] items-center justify-center",
+          "flex max-w-fit fixed top-10 inset-x-0 mx-auto z-5000 items-center justify-center",
           className
         )}
       >
