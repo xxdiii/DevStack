@@ -6,6 +6,7 @@ import { IconBrandGithub, IconBrandGoogle } from "@tabler/icons-react";
 import { useAuthStore } from "@/store/Auth";
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
+import { div } from "motion/react-client";
 
 const BottomGradient = () => {
     return (
@@ -57,6 +58,7 @@ function LoginPage(){
     }
 
     return(
+        <div className="flex min-h-screen justify-center items-center px-4 py-16">
         <div className="mx-auto w-full max-w-md rounded-none border border-solid border-white/30 bg-white p-4 shadow-input dark:bg-black md:rounded-2xl md:p-8">
             <h2 className="text-xl font-bold text-neutral-800 dark:text-neutral-200">
                 Login to Riverflow
@@ -125,6 +127,7 @@ function LoginPage(){
                     </button>
                 </div>
             </form>
+        </div>
         </div>
     )
 

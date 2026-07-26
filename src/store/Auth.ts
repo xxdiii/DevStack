@@ -49,8 +49,19 @@ export const useAuthStore = create<IAuthStore>()(
 
             async verifySession(){
                 try {
-                    const session = await account.getSession("current")
-                    set({session})
+                    const [session, user, { jwt }] = await Promise.all([
+                        account.getSession("current"),
+                        account.get<UserPrefs>(),
+                        account.createJWT(),
+                    ])
+
+                    if (user.prefs?.reputation === undefined) {
+                        await account.updatePrefs({
+                            reputation: 0,
+                        })
+                    }
+
+                    set({ session, user, jwt })
                 } catch (error) {
                     console.log(error);
                     
@@ -64,9 +75,11 @@ export const useAuthStore = create<IAuthStore>()(
                         account.get<UserPrefs>(),
                         account.createJWT()
                     ])
-                    if (!user.prefs?.reputation) await account.updatePrefs({
-                        reputaion: 0
-                    })
+                    if (user.prefs?.reputation === undefined) {
+                        await account.updatePrefs({
+                            reputation: 0,
+                        })
+                    }
 
                     set({session,user,jwt})
                     return {success: true}
