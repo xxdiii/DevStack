@@ -4,6 +4,8 @@ import { databases, users } from "@/models/server/config";
 import { UserPrefs } from "@/store/Auth";
 import { Query } from "node-appwrite";
 
+export const dynamic = "force-dynamic";
+
 const LatestQuestions = async () => {
     const questions = await databases.listDocuments(db, questionCollection, [
         Query.limit(5),
