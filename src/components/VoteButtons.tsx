@@ -23,7 +23,7 @@ const VoteButtons =({
     className?: string,
 })=>{
     const [votedDocument,setVotedDocument] = useState<Models.Document | null>()
-    const [voteResult,setVoteResult] = useState<number>(upvotes.total - downvotes.total)
+    const [voteResult,setVoteResult] = useState<number>((upvotes?.total ?? 0) - (downvotes?.total ?? 0))
 
     const router = useRouter();
     const { user } = useAuthStore();

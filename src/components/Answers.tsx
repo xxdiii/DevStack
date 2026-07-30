@@ -90,8 +90,8 @@ const Answers = ({
                         <VoteButtons
                             type="answer"
                             id={answer.$id}
-                            upvotes={answer.upvotesDocuments}
-                            downvotes={answer.downvotesDocuments}/>
+                            upvotes={answer.upvotes}
+                            downvotes={answer.downvotes}/>
                         {user?.$id === answer.authorId ? (
                             <button
                                 className="flex h-10 w-10 items-center justify-center rounded-full border border-red-500 p-1 text-red-500 duration-200 hover:bg-red-500/10"

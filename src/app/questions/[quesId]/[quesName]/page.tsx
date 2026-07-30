@@ -58,6 +58,14 @@ const Page = async ({params}:Props)=>{
         ])
     ])
 
+    console.log({
+    question,
+    answers,
+    upvotes,
+    downvotes,
+    comments
+    });
+
     const author = await users.get<UserPrefs>(question.authorId);
 
     [comments.documents, answers.documents] = await Promise.all([
@@ -114,8 +122,8 @@ const Page = async ({params}:Props)=>{
                 return {
                     ...answer,
                     comments: answerComments,
-                    upvotesDocuments: answerUpvotes,
-                    downvotesDocument: answerDownvotes,
+                    upvotes: answerUpvotes,
+                    downvotes: answerDownvotes,
                     author: {
                         $id: answerAuthor.$id,
                         name: answerAuthor.name,
@@ -142,7 +150,7 @@ const Page = async ({params}:Props)=>{
                         <div className="flex gap-4 text-sm">
                             <span>
                                 Asked {convertDateToRelativeTime(new Date(question.$createdAt))}
-                            </span>
+                            </span>                            
                             <span>Answer {answers.total}</span>
                             <span>Votes {upvotes.total + downvotes.total}</span>
                         </div>
