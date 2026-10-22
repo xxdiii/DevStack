@@ -4,7 +4,7 @@
 
 ### _Where Developers Find Answers._
 
-A modern, full-stack developer Q&A community platform built with **Next.js 19**, **Appwrite**, and **Magic UI** — inspired by Stack Overflow.
+A modern, full-stack developer Q&A community platform built with **Next.js 16**, **Appwrite**, and **Magic UI** — inspired by Stack Overflow.
 
 <br/>
 
