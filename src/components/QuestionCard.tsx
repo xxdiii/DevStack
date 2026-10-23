@@ -39,7 +39,7 @@ const QuestionCard = ({ques}:{ques: Models.Document})=>{
                     {ques.tags.map((tag: string) => (
                         <Link
                             key={tag}
-                            href={`/questions?tag=${tag}`}
+                            href={`/questions?tag=${encodeURIComponent(tag)}`}
                             className="inline-block rounded-lg bg-white/10 px-2 py-0.5 duration-200 hover:bg-white/20"
                         >
                             #{tag}
@@ -59,7 +59,7 @@ const QuestionCard = ({ques}:{ques: Models.Document})=>{
                         >
                             {ques.author.name}
                         </Link>
-                        <strong>&quot;{ques.author.reputation}&quot;</strong>
+                        <strong>{ques.author.reputation}</strong>
                     </div>
                     <span>asked {convertDateToRelativeTime(new Date(ques.$createdAt))}</span>
                 </div>

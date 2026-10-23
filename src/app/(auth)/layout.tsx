@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/Auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-const layout = ({children}:{children: React.ReactNode }) =>{
+const Layout = ({children}:{children: React.ReactNode }) =>{
     const { session } = useAuthStore();
     const router = useRouter()
 
@@ -24,4 +24,4 @@ const layout = ({children}:{children: React.ReactNode }) =>{
     )
 }
 
-export default layout;
+export default Layout;

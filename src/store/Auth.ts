@@ -11,11 +11,13 @@ export interface UserPrefs {
 interface IAuthStore {
     session: Models.Session | null;
     jwt: string | null;
+    jwtIssuedAt: number | null;
     user: Models.User<UserPrefs> | null;
     hydrated: boolean
 
     setHydrated(): void,
     verifySession(): Promise<void>;
+    getJWT(): Promise<string | null>;
     login(
         email: string,
         password: string
@@ -37,9 +39,10 @@ interface IAuthStore {
 
 export const useAuthStore = create<IAuthStore>()(
     persist(
-        immer((set) =>({
+        immer((set, get) =>({
             session: null,
             jwt: null,
+            jwtIssuedAt: null,
             user: null,
             hydrated: false,
 
@@ -48,6 +51,9 @@ export const useAuthStore = create<IAuthStore>()(
             },
 
             async verifySession(){
+                // Nothing to verify when logged out
+                if (!get().session) return
+
                 try {
                     const [session, user, { jwt }] = await Promise.all([
                         account.getSession("current"),
@@ -56,15 +62,38 @@ export const useAuthStore = create<IAuthStore>()(
                     ])
 
                     if (user.prefs?.reputation === undefined) {
-                        await account.updatePrefs({
+                        user.prefs = await account.updatePrefs<UserPrefs>({
+                            ...user.prefs,
                             reputation: 0,
-                        })
+                        }).then(updated => updated.prefs)
                     }
 
-                    set({ session, user, jwt })
+                    set({ session, user, jwt, jwtIssuedAt: Date.now() })
                 } catch (error) {
                     console.log(error);
-                    
+                    // Session expired or was revoked: drop the stale persisted user
+                    if (error instanceof AppwriteException && error.code === 401) {
+                        set({ session: null, jwt: null, jwtIssuedAt: null, user: null })
+                    }
+                }
+            },
+
+            async getJWT(){
+                const { session, jwt, jwtIssuedAt } = get()
+                if (!session) return null
+                // Appwrite JWTs live 15 minutes; refresh a little early
+                if (jwt && jwtIssuedAt && Date.now() - jwtIssuedAt < 10 * 60 * 1000) return jwt
+
+                try {
+                    const { jwt: freshJwt } = await account.createJWT()
+                    set({ jwt: freshJwt, jwtIssuedAt: Date.now() })
+                    return freshJwt
+                } catch (error) {
+                    console.log(error);
+                    if (error instanceof AppwriteException && error.code === 401) {
+                        set({ session: null, jwt: null, jwtIssuedAt: null, user: null })
+                    }
+                    return null
                 }
             },
 
@@ -76,12 +105,13 @@ export const useAuthStore = create<IAuthStore>()(
                         account.createJWT()
                     ])
                     if (user.prefs?.reputation === undefined) {
-                        await account.updatePrefs({
+                        user.prefs = await account.updatePrefs<UserPrefs>({
+                            ...user.prefs,
                             reputation: 0,
-                        })
+                        }).then(updated => updated.prefs)
                     }
 
-                    set({session,user,jwt})
+                    set({session,user,jwt,jwtIssuedAt: Date.now()})
                     return {success: true}
 
                 } catch (error) {
@@ -110,11 +140,11 @@ export const useAuthStore = create<IAuthStore>()(
             async logout(){
                 try {
                     await account.deleteSessions()
-                    set({session: null, jwt: null, user: null})
                 } catch (error) {
                     console.log(error);
-                    
                 }
+                // Clear local state even if the server session was already gone
+                set({session: null, jwt: null, jwtIssuedAt: null, user: null})
             }
 
         })),{

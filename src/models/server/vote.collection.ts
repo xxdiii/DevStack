@@ -1,15 +1,9 @@
-import {IndexType, Permission,Role} from "node-appwrite"
+import { publicReadOnly } from "./permissions"
 import { db, voteCollection } from "../name"
 import { databases } from "./config"
 
 export default async function createVoteCollection(){
-    await databases.createCollection(db,voteCollection,voteCollection,[
-        Permission.read(Role.any()),
-        Permission.read(Role.users()),
-        Permission.create(Role.users()),
-        Permission.update(Role.users()),
-        Permission.delete(Role.users()),
-    ])
+    await databases.createCollection(db,voteCollection,voteCollection,publicReadOnly)
     console.log("Vote Collection Created");
     
 

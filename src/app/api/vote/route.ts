@@ -1,37 +1,34 @@
 import { answerCollection, db, questionCollection, voteCollection } from "@/models/name";
-import { databases, users } from "@/models/server/config";
-import { UserPrefs } from "@/store/Auth";
+import { databases } from "@/models/server/config";
+import { errorResponse, getAuthUser, unauthorized } from "@/models/server/auth";
+import { changeReputation, getVoteScore } from "@/models/server/helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { ID, Query } from "node-appwrite";
 
-async function getVoteResult(type: "question" | "answer", typeId: string) {
-    const [upvotes, downvotes] = await Promise.all([
-        databases.listDocuments(db, voteCollection, [
-            Query.equal("type", type),
-            Query.equal("typeId", typeId),
-            Query.equal("voteStatus", "upvoted"),
-            Query.limit(1),
-        ]),
-        databases.listDocuments(db, voteCollection, [
-            Query.equal("type", type),
-            Query.equal("typeId", typeId),
-            Query.equal("voteStatus", "downvoted"),
-            Query.limit(1),
-        ]),
-    ]);
-
-    return upvotes.total - downvotes.total;
-}
-
 export async function POST(request: NextRequest) {
     try {
-        const { type, typeId, voteStatus, votedById } = await request.json();
+        const user = await getAuthUser(request);
+        if (!user) return unauthorized();
+
+        const { type, typeId, voteStatus } = await request.json();
+
+        if (
+            (type !== "question" && type !== "answer") ||
+            (voteStatus !== "upvoted" && voteStatus !== "downvoted") ||
+            !typeId
+        ) {
+            return NextResponse.json({ error: "Invalid vote" }, { status: 400 });
+        }
+
+        // Throws 404 if the target doesn't exist
+        const collection = type === "question" ? questionCollection : answerCollection;
+        const questionOrAnswer = await databases.getDocument(db, collection, typeId);
 
         // 1. Check for existing vote
         const response = await databases.listDocuments(db, voteCollection, [
             Query.equal("type", type),
             Query.equal("typeId", typeId),
-            Query.equal("votedById", votedById)
+            Query.equal("votedById", user.$id)
         ]);
 
         const existingVote = response.documents.length > 0 ? response.documents[0] : null;
@@ -51,10 +48,10 @@ export async function POST(request: NextRequest) {
             newDoc = await databases.createDocument(db, voteCollection, ID.unique(), {
                 typeId,
                 type,
-                votedById,
+                votedById: user.$id,
                 voteStatus
             });
-            
+
             // Apply the new vote's effect on reputation
             reputationChange += voteStatus === "upvoted" ? 1 : -1;
             message = existingVote ? "Vote status updated" : "Voted";
@@ -62,18 +59,11 @@ export async function POST(request: NextRequest) {
 
         // 4. Update the author's reputation exactly ONCE if it changed
         if (reputationChange !== 0) {
-            const collection = type === "question" ? questionCollection : answerCollection;
-            const questionOrAnswer = await databases.getDocument(db, collection, typeId);
-            const authorPrefs = await users.getPrefs<UserPrefs>(questionOrAnswer.authorId);
-            
-            await users.updatePrefs<UserPrefs>(questionOrAnswer.authorId, {
-                // Use a fallback to 0 in case reputation is undefined for a new user
-                reputation: Number(authorPrefs.reputation || 0) + reputationChange
-            });
+            await changeReputation(questionOrAnswer.authorId, reputationChange);
         }
 
         // 5. Get the final vote result and return
-        const voteResult = await getVoteResult(type, typeId);
+        const voteResult = await getVoteScore(type, typeId);
 
         return NextResponse.json(
             {
@@ -83,10 +73,7 @@ export async function POST(request: NextRequest) {
             { status: 201 }
         );
 
-    } catch (error: any) {
-        return NextResponse.json(
-            { error: error?.message || "Error handling vote" },
-            { status: 500 }
-        );
+    } catch (error) {
+        return errorResponse(error, "Error handling vote");
     }
 }

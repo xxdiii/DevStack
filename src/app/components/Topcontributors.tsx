@@ -39,7 +39,7 @@ const Notification = ({ user }: { user: Models.User<UserPrefs> }) => {
                     <p className="text-sm font-normal dark:text-white/60">
                         <span>Reputation</span>
                         <span className="mx-1">·</span>
-                        <span className="text-xs text-gray-500">{user.prefs.reputation}</span>
+                        <span className="text-xs text-gray-500">{user.prefs?.reputation ?? 0}</span>
                     </p>
                 </div>
             </div>
@@ -48,12 +48,18 @@ const Notification = ({ user }: { user: Models.User<UserPrefs> }) => {
 };
 
 export default async function TopContributers() {
-    const topUsers = await users.list<UserPrefs>([Query.limit(10)]);
+    // Appwrite can't sort users by a preference, so sort the first 100 here
+    const { users: allUsers } = await users.list<UserPrefs>([Query.limit(100)]);
+    const topUsers = allUsers
+        .sort((a, b) => Number(b.prefs?.reputation ?? 0) - Number(a.prefs?.reputation ?? 0))
+        .slice(0, 10)
+        // AnimatedList puts the last child on top
+        .reverse();
 
     return (
         <div className="bg-background relative flex max-h-100 min-h-100 w-full max-w-lg flex-col overflow-hidden rounded-lg p-6 shadow-lg">
             <AnimatedList>
-                {topUsers.users.map(user => (
+                {topUsers.map(user => (
                     <Notification user={user} key={user.$id} />
                 ))}
             </AnimatedList>

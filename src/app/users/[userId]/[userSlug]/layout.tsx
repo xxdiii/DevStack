@@ -1,5 +1,8 @@
 import { avatars } from "@/models/client/config";
 import { users } from "@/models/server/config";
+import { isNotFound } from "@/models/server/helpers";
+import { notFound } from "next/navigation";
+import { Models } from "node-appwrite";
 import { UserPrefs } from "@/store/Auth";
 import convertDateToRelativeTime from "@/utils/relativeTime";
 import React from "react";
@@ -15,7 +18,13 @@ const Layout = async ({
     params: Promise<{ userId: string; userSlug: string }>;
 }) => {
     const { userId, userSlug } = await params;
-    const user = await users.get<UserPrefs>(userId);
+    let user: Models.User<UserPrefs>;
+    try {
+        user = await users.get<UserPrefs>(userId);
+    } catch (error) {
+        if (isNotFound(error)) notFound();
+        throw error;
+    }
 
     return (
         <div className="container mx-auto space-y-4 px-4 pb-20 pt-32">
@@ -33,10 +42,9 @@ const Layout = async ({
                     <div className="flex items-start justify-between">
                         <div className="block space-y-0.5">
                             <h1 className="text-3xl font-bold">{user.name}</h1>
-                            <p className="text-lg text-gray-500">{user.email}</p>
                             <p className="flex items-center gap-1 text-sm font-bold text-gray-500">
-                                <IconUserFilled className="w-4 shrink-0" /> Dropped{" "}
-                                {convertDateToRelativeTime(new Date(user.$createdAt))},
+                                <IconUserFilled className="w-4 shrink-0" /> Joined{" "}
+                                {convertDateToRelativeTime(new Date(user.$createdAt))}
                             </p>
                             <p className="flex items-center gap-1 text-sm text-gray-500">
                                 <IconClockFilled className="w-4 shrink-0" /> Last activity&nbsp;

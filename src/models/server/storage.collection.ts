@@ -1,39 +1,40 @@
-import {IndexType, Permission,Role} from "node-appwrite"
 import { questionAttachmentBucket } from "../name"
 import { storage } from "./config"
+import { isNotFound } from "./helpers"
+import { publicReadOnly, samePermissions } from "./permissions"
+
+const allowedExtensions = ["jpg","png","gif","jpeg","webp","heic"]
 
 export default async function getOrCreateStorage(){
     try {
-        await storage.getBucket(questionAttachmentBucket)
-        console.log("storage Connected");  
-    } catch (error) {
-        try {
-            await storage.createBucket(
+        const bucket = await storage.getBucket(questionAttachmentBucket)
+        console.log("storage Connected");
+
+        // Older buckets let any logged-in user change files; uploads now go through /api/question
+        if (!samePermissions(bucket.$permissions, publicReadOnly) || bucket.fileSecurity) {
+            await storage.updateBucket(
                 questionAttachmentBucket,
-                questionAttachmentBucket,
-                [
-                    Permission.read(Role.any()),
-                    Permission.read(Role.users()),
-                    Permission.create(Role.users()),
-                    Permission.update(Role.users()),
-                    Permission.delete(Role.users())
-                ],
+                bucket.name,
+                publicReadOnly,
                 false,
-                undefined,
-                undefined,
-                ["jpg","png","gif","jpeg","webp","heic"]
-            );
-
-            console.log("Storage Created");
-            console.log("Storage Connected");
-            
-        } catch (error) {
-            console.error("Error creating storage",error);
-            
+                bucket.enabled,
+                bucket.maximumFileSize,
+                bucket.allowedFileExtensions,
+            )
+            console.log("Storage permissions updated");
         }
-    }
-    
+    } catch (error) {
+        if (!isNotFound(error)) throw error;
 
-    
-    
+        await storage.createBucket(
+            questionAttachmentBucket,
+            questionAttachmentBucket,
+            publicReadOnly,
+            false,
+            undefined,
+            undefined,
+            allowedExtensions
+        );
+        console.log("Storage Created");
+    }
 }

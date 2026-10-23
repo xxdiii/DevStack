@@ -5,12 +5,17 @@ import { MagicCard, MagicContainer } from "@/components/magicui/magic-card";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { answerCollection, db, questionCollection } from "@/models/name";
 import { Query } from "node-appwrite";
+import { notFound } from "next/navigation";
+import { isNotFound } from "@/models/server/helpers";
 
 const Page = async ({ params }: {params: Promise<{ userId: string; userSlug: string }>;}) => {
     const { userId } = await params;
 
     const [user, questions, answers] = await Promise.all([
-        users.get<UserPrefs>(userId),
+        users.get<UserPrefs>(userId).catch(error => {
+            if (isNotFound(error)) notFound();
+            throw error;
+        }),
         databases.listDocuments(db, questionCollection, [
             Query.equal("authorId", userId),
             Query.limit(1),

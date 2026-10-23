@@ -1,15 +1,14 @@
-import { databases, users } from "@/models/server/config";
-import { answerCollection, db, voteCollection, questionCollection } from "@/models/name";
+import { databases } from "@/models/server/config";
+import { db, questionCollection } from "@/models/name";
+import { enrichQuestions } from "@/models/server/helpers";
 import { Query } from "node-appwrite";
 import React from "react";
 import Link from "next/link";
 import { ShimmerButton } from "@/components/magicui/shimmer-button";
 import QuestionCard from "@/components/QuestionCard";
-import { UserPrefs } from "@/store/Auth";
 import Pagination from "@/components/Pagination";
 import Search from "./Search";
 
-// 1. Updated type definition to expect a Promise for Next.js 15
 interface PageProps {
   searchParams: Promise<{
     page?: string;
@@ -18,22 +17,25 @@ interface PageProps {
   }>;
 }
 
+const PAGE_SIZE = 25;
+
 const Page = async ({ searchParams }: PageProps) => {
-  // 2. Await searchParams before accessing properties
   const resolvedSearchParams = await searchParams;
 
-  const page = resolvedSearchParams.page || "1";
-  const tag = resolvedSearchParams.tag;
-  const search = resolvedSearchParams.search;
+  const page = Math.max(1, parseInt(resolvedSearchParams.page || "1") || 1);
+  const tag = resolvedSearchParams.tag?.trim();
+  const search = resolvedSearchParams.search?.trim();
 
   const queries = [
     Query.orderDesc("$createdAt"),
-    Query.offset((+page - 1) * 25),
-    Query.limit(25),
+    Query.offset((page - 1) * PAGE_SIZE),
+    Query.limit(PAGE_SIZE),
   ];
 
-  if (tag) queries.push(Query.equal("tags", tag));
+  // "tags" is an array attribute, which Appwrite only matches with contains
+  if (tag) queries.push(Query.contains("tags", tag));
   if (search) {
+    // Needs the full-text indexes created in questions.collection.ts
     queries.push(
       Query.or([
         Query.search("title", search),
@@ -43,34 +45,7 @@ const Page = async ({ searchParams }: PageProps) => {
   }
 
   const questions = await databases.listDocuments(db, questionCollection, queries);
-
-  const formattedDocuments = await Promise.all(
-    questions.documents.map(async (ques) => {
-      const [author, answers, votes] = await Promise.all([
-        users.get<UserPrefs>(ques.authorId),
-        databases.listDocuments(db, answerCollection, [
-          Query.equal("questionId", ques.$id),
-          Query.limit(1),
-        ]),
-        databases.listDocuments(db, voteCollection, [
-          Query.equal("type", "question"),
-          Query.equal("typeId", ques.$id),
-          Query.limit(1),
-        ]),
-      ]);
-
-      return {
-        ...ques,
-        totalAnswers: answers.total,
-        totalVotes: votes.total,
-        author: {
-          $id: author.$id,
-          reputation: author.prefs?.reputation ?? 0,
-          name: author.name,
-        },
-      };
-    })
-  );
+  const formattedDocuments = await enrichQuestions(questions.documents);
 
   return (
     <div className="container mx-auto px-4 pb-20 pt-36">
@@ -88,14 +63,17 @@ const Page = async ({ searchParams }: PageProps) => {
         <Search />
       </div>
       <div className="mb-4">
-        <p>{questions.total} questions</p>
+        <p>
+          {questions.total} questions
+          {tag ? ` tagged #${tag}` : ""}
+        </p>
       </div>
       <div className="mb-4 max-w-3xl space-y-6">
         {formattedDocuments.map((ques) => (
           <QuestionCard key={ques.$id} ques={ques} />
         ))}
       </div>
-      <Pagination total={questions.total} limit={25} />
+      <Pagination total={questions.total} limit={PAGE_SIZE} />
     </div>
   );
 };

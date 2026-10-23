@@ -24,8 +24,8 @@ const LogoutButton = () => {
             
             // 3. Force Next.js to clear the client cache and re-fetch server components
             router.refresh(); 
-        } catch (error: any) {
-            console.error("Logout failed:", error?.message || error);
+        } catch (error) {
+            console.error("Logout failed:", error);
         } finally {
             setIsLoading(false);
         }

@@ -8,19 +8,18 @@ import { avatars } from "@/models/client/config";
 import {
     answerCollection,
     db,
-    voteCollection,
     questionCollection,
     commentCollection,
     questionAttachmentBucket,
 } from "@/models/name";
-import { databases, users } from "@/models/server/config";
+import { databases } from "@/models/server/config";
+import { getAuthor, getVotes, isNotFound } from "@/models/server/helpers";
 import { storage } from "@/models/client/config";
-import { UserPrefs } from "@/store/Auth";
 import convertDateToRelativeTime from "@/utils/relativeTime";
 import slugify from "@/utils/slugify";
-import { IconEdit } from "@tabler/icons-react";
 import Link from "next/link";
-import { Query } from "node-appwrite";
+import { notFound } from "next/navigation";
+import { Models, Query } from "node-appwrite";
 import React from "react";
 import DeleteQuestion from "./DeleteQuestion";
 import EditQuestion from "./EditQuestion";
@@ -30,105 +29,66 @@ type Props = {
     params: Promise<{quesId: string; quesName: string}>;
 };
 
+async function withAuthors<T extends Models.Document>(documents: T[]) {
+    return Promise.all(
+        documents.map(async document => ({
+            ...document,
+            author: await getAuthor(document.authorId),
+        }))
+    );
+}
+
 const Page = async ({params}:Props)=>{
     const { quesId } = await params;
 
-    const [question, answers, upvotes, downvotes,comments] = await Promise.all([
-        databases.getDocument(db, questionCollection, quesId),
+    let question: Models.Document;
+    try {
+        question = await databases.getDocument(db, questionCollection, quesId);
+    } catch (error) {
+        if (isNotFound(error)) notFound();
+        throw error;
+    }
+
+    const [answers, { upvotes, downvotes }, comments, author] = await Promise.all([
         databases.listDocuments(db,answerCollection,[
             Query.orderDesc("$createdAt"),
             Query.equal("questionId", quesId),
+            Query.limit(100),
         ]),
-        databases.listDocuments(db,voteCollection, [
-            Query.equal("type","question"),
-            Query.equal("typeId",quesId),
-            Query.equal("voteStatus","upvoted"),
-            Query.limit(1)
-        ]),
-        databases.listDocuments(db,voteCollection, [
-            Query.equal("type","question"),
-            Query.equal("typeId",quesId),
-            Query.equal("voteStatus","downvoted"),
-            Query.limit(1)
-        ]),
+        getVotes("question", quesId),
         databases.listDocuments(db, commentCollection,[
             Query.orderDesc("$createdAt"),
             Query.equal("type","question"),
             Query.equal("typeId",quesId),
-        ])
+            Query.limit(100),
+        ]),
+        getAuthor(question.authorId),
     ])
 
-    console.log({
-    question,
-    answers,
-    upvotes,
-    downvotes,
-    comments
-    });
-
-    const author = await users.get<UserPrefs>(question.authorId);
-
-    [comments.documents, answers.documents] = await Promise.all([
-        Promise.all(
-            comments.documents.map(async(comment) =>{
-                const commentAuthor = await users.get<UserPrefs>(comment.authorId);
-                return {
-                    ...comment,
-                    author: {
-                        $id: commentAuthor.$id,
-                        name: commentAuthor.name,
-                        reputation: commentAuthor.prefs.reputation,
-                    }
-                }
-            })
-        ),
+    const [commentDocuments, answerDocuments] = await Promise.all([
+        withAuthors(comments.documents),
         Promise.all(
             answers.documents.map(async(answer)=>{
-                const [answerAuthor, answerUpvotes,answerDownvotes, answerComments] = await Promise.all([
-                    users.get<UserPrefs>(answer.authorId),
-                    databases.listDocuments(db,voteCollection, [
-                        Query.equal("type","answer"),
-                        Query.equal("typeId",answer.$id),
-                        Query.equal("voteStatus", "upvoted"),
-                        Query.limit(1)
-                    ]),
-                    databases.listDocuments(db,voteCollection, [
-                        Query.equal("type","answer"),
-                        Query.equal("typeId",answer.$id),
-                        Query.equal("voteStatus", "downvoted"),
-                        Query.limit(1)
-                    ]),
+                const [answerAuthor, answerVotes, answerComments] = await Promise.all([
+                    getAuthor(answer.authorId),
+                    getVotes("answer", answer.$id),
                     databases.listDocuments(db,commentCollection,[
                         Query.equal("type","answer"),
                         Query.equal("typeId",answer.$id),
-                        Query.orderDesc("$createdAt")
+                        Query.orderDesc("$createdAt"),
+                        Query.limit(100),
                     ])
                 ])
 
-                answerComments.documents = await Promise.all(
-                    answerComments.documents.map(async (comment)=>{
-                        const commentAuthor = await users.get<UserPrefs>(comment.authorId)
-                        return { 
-                            ...comment,
-                            author: {
-                                $id: commentAuthor.$id,
-                                name: commentAuthor.name,
-                                reputation: commentAuthor.prefs.reputation, 
-                            }
-                        }
-                    })
-                )
-
                 return {
                     ...answer,
-                    comments: answerComments,
-                    upvotes: answerUpvotes,
-                    downvotes: answerDownvotes,
-                    author: {
-                        $id: answerAuthor.$id,
-                        name: answerAuthor.name,
-                        reputation: answerAuthor.prefs.reputation, 
-                    }
+                    comments: {
+                        total: answerComments.total,
+                        documents: await withAuthors(answerComments.documents),
+                    },
+                    upvotes: answerVotes.upvotes,
+                    downvotes: answerVotes.downvotes,
+                    author: answerAuthor,
                 }
             })
         )
@@ -150,9 +110,9 @@ const Page = async ({params}:Props)=>{
                         <div className="flex gap-4 text-sm">
                             <span>
                                 Asked {convertDateToRelativeTime(new Date(question.$createdAt))}
-                            </span>                            
-                            <span>Answer {answers.total}</span>
-                            <span>Votes {upvotes.total + downvotes.total}</span>
+                            </span>
+                            <span>Answers {answers.total}</span>
+                            <span>Votes {upvotes.total - downvotes.total}</span>
                         </div>
                     </div>
                     <Link href="/questions/ask" className="ml-auto inline-block shrink-0">
@@ -200,7 +160,7 @@ const Page = async ({params}:Props)=>{
                             {question.tags.map((tag: string) => (
                                 <Link
                                     key={tag}
-                                    href={`/questions?tag=${tag}`}
+                                    href={`/questions?tag=${encodeURIComponent(tag)}`}
                                     className="inline-block rounded-lg bg-white/10 px-2 py-0.5 duration-200 hover:bg-white/20"
                                 >
                                     #{tag}
@@ -223,12 +183,12 @@ const Page = async ({params}:Props)=>{
                                     {author.name}
                                 </Link>
                                 <p>
-                                    <strong>{author.prefs.reputation}</strong>
+                                    <strong>{author.reputation}</strong>
                                 </p>
                             </div>
                         </div>
                         <Comments
-                            comments={comments}
+                            comments={{ total: comments.total, documents: commentDocuments }}
                             className="mt-4"
                             type="question"
                             typeId={question.$id}
@@ -236,7 +196,7 @@ const Page = async ({params}:Props)=>{
                         <hr className="my-4 border-white/40" />
                     </div>
                 </div>
-                <Answers answers={answers} questionId={question.$id} />
+                <Answers answers={{ total: answers.total, documents: answerDocuments }} questionId={question.$id} />
             </div>
         </TracingBeam>
     );

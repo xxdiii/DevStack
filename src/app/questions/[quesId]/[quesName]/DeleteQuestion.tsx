@@ -1,7 +1,6 @@
 "use client";
 
-import { databases } from "@/models/client/config";
-import { db, questionCollection } from "@/models/name";
+import apiFetch, { readError } from "@/lib/apiFetch";
 import { useAuthStore } from "@/store/Auth";
 import { IconTrash } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
@@ -18,11 +17,18 @@ const DeleteQuestion = ({
     const router = useRouter();
 
     const deleteQuestion = async ()=>{
+        if (!window.confirm("Delete this question and all of its answers and comments?")) return;
+
         try {
-            await databases.deleteDocument(db,questionCollection, questionId)
+            const response = await apiFetch("/api/question", {
+                method: "DELETE",
+                body: JSON.stringify({ questionId }),
+            })
+            if (!response.ok) throw new Error(await readError(response, "Something went wrong"))
             router.push("/questions")
-        } catch (error:any) {
-            window.alert(error?.message || "Something went wrong");
+            router.refresh()
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Something went wrong");
         }
     }
 

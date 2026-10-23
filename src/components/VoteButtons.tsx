@@ -8,6 +8,7 @@ import { IconCaretUpFilled, IconCaretDownFilled } from "@tabler/icons-react";
 import { Models, Query } from "appwrite";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
+import apiFetch, { readError } from "@/lib/apiFetch";
 
 const VoteButtons =({
     type,
@@ -31,65 +32,43 @@ const VoteButtons =({
     useEffect(()=>{
         (
             async()=>{
-                if (user){
+                if (!user) return setVotedDocument(() => null);
+                try {
                     const response = await databases.listDocuments(db,voteCollection, [
                         Query.equal("type",type),
                         Query.equal("typeId",id),
                         Query.equal("votedById",user.$id),
                     ])
                     setVotedDocument(()=>response.documents[0] || null );
+                } catch {
+                    // Still allow voting; the server works out the existing vote
+                    setVotedDocument(() => null);
                 }
             }
         )();
     },[user,id,type])
 
-    const toggleUpvote = async()=>{
+    const vote = async (voteStatus: "upvoted" | "downvoted")=>{
         if(!user) return router.push("/login");
         if(votedDocument === undefined) return;
 
         try {
-            const response = await fetch("/api/vote",{
+            const response = await apiFetch("/api/vote",{
                 method: "POST",
                 body: JSON.stringify({
-                    votedById: user.$id,
-                    voteStatus: "upvoted",
+                    voteStatus,
                     type,
                     typeId: id,
                 }),
             });
+            if (!response.ok) throw new Error(await readError(response, "Something went wrong"));
 
             const data = await response.json();
-            if (!response.ok) throw data;
             setVoteResult(()=>data.data.voteResult);
             setVotedDocument(()=>data.data.document)
             router.refresh();
-        } catch (error:any) {
-            window.alert(error?.message || "Something went wrong");
-        }
-    }
-
-    const toggleDownvote = async ()=>{
-        if(!user) return router.push("/login");
-        if(votedDocument === undefined) return;
-
-        try {
-            const response = await fetch("/api/vote",{
-                method: "POST",
-                body: JSON.stringify({
-                    votedById: user.$id,
-                    voteStatus: "downvoted",
-                    type,
-                    typeId: id,
-                }),
-            });
-            
-            const data = await response.json();
-            if (!response.ok) throw data;
-            setVoteResult(()=>data.data.voteResult);
-            setVotedDocument(()=>data.data.document)
-            router.refresh();
-        } catch (error:any) {
-            window.alert(error?.message || "Something went wrong");
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Something went wrong");
         }
     }
 
@@ -102,7 +81,7 @@ const VoteButtons =({
                         ? "border-orange-500 text-orange-500"
                         : "border-white/30"
                 )}
-                onClick={toggleUpvote}
+                onClick={() => vote("upvoted")}
             >
                 <IconCaretUpFilled />
             </button>
@@ -114,7 +93,7 @@ const VoteButtons =({
                         ? "border-orange-500 text-orange-500"
                         : "border-white/30"
                 )}
-                onClick={toggleDownvote}
+                onClick={() => vote("downvoted")}
             >
                 <IconCaretDownFilled />
             </button>

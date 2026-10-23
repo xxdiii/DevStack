@@ -2,6 +2,9 @@ import HeroSection from "./components/HeroSection";
 import LatestQuestions from "./components/LatestQuestion";
 import TopContributers from "./components/Topcontributors";
 
+// Questions and contributors change constantly; never prerender at build time
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   return (
     <main className="min-h-screen">

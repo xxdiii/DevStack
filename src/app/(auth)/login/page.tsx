@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 import { IconBrandGithub, IconBrandGoogle } from "@tabler/icons-react";
 import { useAuthStore } from "@/store/Auth";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
-import { div } from "motion/react-client";
+import React, { useState } from "react";
 
 const BottomGradient = () => {
     return (
@@ -42,7 +41,7 @@ function LoginPage(){
 
         //validation
         if (!email || !password){
-            setError("Please")
+            setError("Please enter your email and password")
             return
         }
 

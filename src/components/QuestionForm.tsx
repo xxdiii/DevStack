@@ -5,6 +5,7 @@ import {Meteors} from "@/components/magicui/meteors";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/Auth";
+import apiFetch, { readError } from "@/lib/apiFetch";
 import { cn } from "@/lib/utils";
 import slugify from "@/utils/slugify";
 import { IconX } from "@tabler/icons-react";
@@ -47,7 +48,6 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
     const [formData, setFormData] = React.useState({
         title: String(question?.title || ""),
         content: String(question?.content || ""),
-        authorId: user?.$id,
         tags: new Set((question?.tags || []) as string[]),
         attachment: null as File | null,
     });
@@ -55,14 +55,24 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState("");
 
+    // Asking or editing needs an account
     React.useEffect(() => {
-        if (!hydrated) return;
+        if (hydrated && !user) router.push("/login");
+    }, [hydrated, user, router]);
 
+    const addTag = () => {
+        const newTag = tag.trim();
+        if (newTag.length === 0) return;
+        if (newTag.length > 50) {
+            setError(() => "Tags must be at most 50 characters");
+            return;
+        }
         setFormData(prev => ({
             ...prev,
-            authorId: user?.$id,
+            tags: new Set([...Array.from(prev.tags), newTag]),
         }));
-    }, [hydrated, user?.$id]);
+        setTag(() => "");
+    };
 
     const loadConfetti = (timeInMS = 3000) => {
         const end = Date.now() + timeInMS; // 3 seconds
@@ -94,35 +104,23 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
         frame();
     };
 
-    const readErrorMessage = async (response: Response) => {
-        const text = await response.text();
-
-        try {
-            const data = JSON.parse(text) as { error?: string };
-            return data.error || text || "Request failed";
-        } catch {
-            return text || "Request failed";
-        }
-    };
-
     const create = async () => {
         const apiFormData = new FormData();
         apiFormData.append('title', formData.title);
         apiFormData.append('content', formData.content);
-        apiFormData.append('authorId', formData.authorId!);
         apiFormData.append('tags', JSON.stringify(Array.from(formData.tags)));
-        
+
         if (formData.attachment) {
             apiFormData.append('attachment', formData.attachment);
         }
 
-        const response = await fetch('/api/question', {
+        const response = await apiFetch('/api/question', {
             method: 'POST',
             body: apiFormData,
         });
 
         if (!response.ok) {
-            throw new Error(await readErrorMessage(response));
+            throw new Error(await readError(response, "Request failed"));
         }
 
         const result = await response.json();
@@ -138,21 +136,19 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
         apiFormData.append('questionId', question.$id);
         apiFormData.append('title', formData.title);
         apiFormData.append('content', formData.content);
-        apiFormData.append('authorId', formData.authorId!);
         apiFormData.append('tags', JSON.stringify(Array.from(formData.tags)));
-        apiFormData.append('currentAttachmentId', question.attachmentId || '');
-        
+
         if (formData.attachment) {
             apiFormData.append('attachment', formData.attachment);
         }
 
-        const response = await fetch('/api/question', {
+        const response = await apiFetch('/api/question', {
             method: 'PUT',
             body: apiFormData,
         });
 
         if (!response.ok) {
-            throw new Error(await readErrorMessage(response));
+            throw new Error(await readError(response, "Request failed"));
         }
 
         const result = await response.json();
@@ -167,22 +163,32 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
             setError(() => "Please enter a question title");
             return;
         }
-        
+
         if (!formData.content?.trim()) {
             setError(() => "Please describe your problem in detail");
             return;
         }
-        
-        if (!formData.authorId) {
+
+        if (!user) {
             setError(() => "User authentication required");
             return;
         }
-        
+
         if (formData.title.trim().length < 10) {
             setError(() => "Question title must be at least 10 characters long");
             return;
         }
-        
+
+        if (formData.title.trim().length > 100) {
+            setError(() => "Question title must be at most 100 characters long");
+            return;
+        }
+
+        if (formData.tags.size === 0) {
+            setError(() => "Add at least one tag");
+            return;
+        }
+
         if (formData.content.trim().length < 20) {
             setError(() => "Question description must be at least 20 characters long");
             return;
@@ -192,21 +198,13 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
         setError(() => "");
 
         try {
-            console.log("Creating/updating question with data:", {
-                title: formData.title,
-                content: formData.content,
-                authorId: formData.authorId,
-                tags: Array.from(formData.tags),
-            });
-            
             const response = question ? await update() : await create();
-            
-            console.log("Question created/updated successfully:", response);
 
             router.push(`/questions/${response.$id}/${slugify(formData.title)}`);
-        } catch (error: any) {
+            router.refresh();
+        } catch (error) {
             console.error("Error creating/updating question:", error);
-            setError(() => error.message);
+            setError(() => (error instanceof Error ? error.message : "Something went wrong"));
         }
 
         setLoading(() => false);
@@ -223,7 +221,7 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
             )}
             <LabelInputContainer>
                 <Label htmlFor="title" className="text-white">
-                    Title Address
+                    Title
                     <br />
                     <small className="text-slate-300">
                         Be specific and imagine you&apos;re asking a question to another person.
@@ -234,6 +232,7 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
                     name="title"
                     placeholder="e.g. Is there an R function for finding the index of an element in a vector?"
                     type="text"
+                    maxLength={100}
                     value={formData.title}
                     onChange={e => setFormData(prev => ({ ...prev, title: e.target.value }))}
                     className="bg-slate-800 text-white border-slate-600 placeholder:text-slate-400 focus:border-slate-500 focus:ring-slate-500"
@@ -329,29 +328,29 @@ const QuestionForm = ({ question }: { question?: Models.Document }) => {
                             placeholder="e.g. (java c objective-c)"
                             type="text"
                             value={tag}
+                            maxLength={50}
                             onChange={e => setTag(() => e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    addTag();
+                                }
+                            }}
                             className="bg-slate-800 text-white border-slate-600 placeholder:text-slate-400 focus:border-slate-500 focus:ring-slate-500"
                         />
                     </div>
                     <button
                         className="relative shrink-0 rounded-full border border-slate-600 bg-slate-700 px-8 py-2 text-sm text-white transition duration-200 hover:shadow-2xl hover:shadow-white/10"
                         type="button"
-                        onClick={() => {
-                            if (tag.length === 0) return;
-                            setFormData(prev => ({
-                                ...prev,
-                                tags: new Set([...Array.from(prev.tags), tag]),
-                            }));
-                            setTag(() => "");
-                        }}
+                        onClick={addTag}
                     >
                         <div className="absolute inset-x-0 -top-px mx-auto h-px w-1/2 bg-linear-to-r from-transparent via-teal-500 to-transparent shadow-2xl" />
                         <span className="relative z-20">Add</span>
                     </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    {Array.from(formData.tags).map((tag, index) => (
-                        <div key={index} className="flex items-center gap-2">
+                    {Array.from(formData.tags).map(tag => (
+                        <div key={tag} className="flex items-center gap-2">
                             <div className="group relative inline-block rounded-full bg-slate-800 p-px text-xs font-semibold leading-6 text-white no-underline shadow-2xl shadow-zinc-900">
                                 <span className="absolute inset-0 overflow-hidden rounded-full">
                                     <span className="absolute inset-0 rounded-full bg-[radial-gradient(75%_100%_at_50%_0%,rgba(56,189,248,0.6)_0%,rgba(56,189,248,0)_75%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />

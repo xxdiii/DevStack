@@ -1,15 +1,9 @@
-import {IndexType, Permission,Role} from "node-appwrite"
+import { publicReadOnly } from "./permissions"
 import { db, answerCollection } from "../name"
 import { databases } from "./config"
 
 export default async function createanswerCollection(){
-    await databases.createCollection(db,answerCollection,answerCollection,[
-        Permission.read(Role.any()),
-        Permission.read(Role.users()),
-        Permission.create(Role.users()),
-        Permission.update(Role.users()),
-        Permission.delete(Role.users()),
-    ])
+    await databases.createCollection(db,answerCollection,answerCollection,publicReadOnly)
     console.log("Answer collection is created");
 
     //creating attributes and indexes

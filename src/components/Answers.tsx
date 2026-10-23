@@ -1,16 +1,19 @@
 "use client";
 
-import { ID, Models } from "appwrite";
+import { Models } from "appwrite";
 import React, { useState } from "react";
 import VoteButtons from "./VoteButtons";
 import { useAuthStore } from "@/store/Auth";
-import { avatars, databases } from "@/models/client/config";
-import { answerCollection, db } from "@/models/name";
+import { avatars } from "@/models/client/config";
+import apiFetch, { readError } from "@/lib/apiFetch";
 import RTE, { MarkdownPreview } from "./RTE";
 import Comments from "./Comments";
 import slugify from "@/utils/slugify";
 import Link from "next/link";
 import { IconTrash } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+
+const emptyList = () => ({ total: 0, documents: [] });
 
 const Answers = ({
     answers: _answers,
@@ -20,64 +23,76 @@ const Answers = ({
     questionId: string
 })=>{
     const [answers, setAnswers] = useState(_answers)
+    // Take the server's copy whenever router.refresh() delivers a new one,
+    // so counts and reputations don't go stale after votes
+    const [serverAnswers, setServerAnswers] = useState(_answers)
+    if (_answers !== serverAnswers) {
+        setServerAnswers(_answers)
+        setAnswers(_answers)
+    }
     const [newAnswer, setNewAnswer] = useState("")
     const { user } = useAuthStore();
+    const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>)=>{
         e.preventDefault()
-        if (!user || !newAnswer) return 
+        if (!user) return router.push("/login")
+        if (!newAnswer.trim()) return
 
         try {
-            const response = await fetch(`/api/answer`, {
+            const response = await apiFetch(`/api/answer`, {
                 method: "POST",
                 body: JSON.stringify({
                     questionId: questionId,
                     answer: newAnswer,
-                    authorId: user.$id,
                 })
             })
-
+            if(!response.ok) throw new Error(await readError(response, "Error creating answer"))
             const data = await response.json()
-            if(!response.ok) throw data
 
             setNewAnswer(()=> "")
+            // Same shape the question page builds on the server
             setAnswers(prev=>({
                 total: prev.total+1,
                 documents: [
                     {
                         ...data,
-                        author: user,
-                        upvotesDocuments: {document: [],total: 0},
-                        downvotesDocuments: {document: [],total: 0},
-                        comments: {document: [],total: 0},
+                        author: {
+                            $id: user.$id,
+                            name: user.name,
+                            reputation: Number(user.prefs?.reputation ?? 0) + 1,
+                        },
+                        upvotes: emptyList(),
+                        downvotes: emptyList(),
+                        comments: emptyList(),
                     },
                     ...prev.documents,
                 ],
             }));
+            router.refresh()
 
-        } catch (error: any) {
-            window.alert(error?.message || "Error creating answer");
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Error creating answer");
         }
     }
 
     const deleteAnswer = async (answerId: string)=>{
         try {
-            const response = await fetch(`/api/answer`,{
+            const response = await apiFetch(`/api/answer`,{
                 method: "DELETE",
                 body: JSON.stringify({
                     answerId: answerId,
                 })
             })
+            if(!response.ok) throw new Error(await readError(response, "Error deleting answer"))
 
-            const data = await response.json()
-            if(!response.ok) throw data
-            
             setAnswers(prev=>({
                 total: prev.total-1,
                 documents: prev.documents.filter(answer=>answer.$id!==answerId)
             }))
-        } catch (error:any) {
-            window.alert(error?.message || "Error deleting answer");
+            router.refresh()
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Error deleting answer");
         }
     }
 
@@ -136,8 +151,8 @@ const Answers = ({
             <hr className="my-4 border-white/40" />
             <form onSubmit={handleSubmit} className="space-y-2">
                 <h2 className="mb-4 text-xl">Your Answer</h2>
-                <RTE 
-                value={newAnswer} 
+                <RTE
+                value={newAnswer}
                 onChange={value => setNewAnswer(() => value || "")}
                 data-color-mode="dark"
                 className="w-full"
@@ -146,7 +161,7 @@ const Answers = ({
                 visible={true}
                 visibleEditor={true}
                 previewWidth="50%"
-                height="300px" 
+                height="300px"
                 />
                 <button className="shrink-0 rounded bg-orange-500 px-4 py-2 font-bold text-white hover:bg-orange-600">
                     Post Your Answer

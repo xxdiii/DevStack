@@ -8,16 +8,18 @@ import { useRouter } from "next/navigation";
 import React, { useEffect } from "react";
 
 const EditQues =({ question }: { question: Models.Document })=>{
-    const { user } = useAuthStore();
+    const { user, hydrated } = useAuthStore();
     const router = useRouter();
-    
+    const isAuthor = user?.$id === question.authorId;
+
+    // Wait for the persisted session to load before deciding to redirect
     useEffect(()=>{
-        if(question.authorId !== user?.$id){
+        if (hydrated && !isAuthor) {
             router.push(`/questions/${question.$id}/${slugify(question.title)}`)
         }
-    },[]);
+    },[hydrated, isAuthor, router, question.$id, question.title]);
 
-    if (user?.$id !== question.authorId) return null;
+    if (!isAuthor) return null;
 
     return (
         <div className="block pb-20 pt-32">

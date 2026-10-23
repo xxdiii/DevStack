@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { IconBrandGithub, IconBrandGoogle } from "@tabler/icons-react";
 import { useAuthStore } from "@/store/Auth";
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 const BottomGradient = () => {
     return (
@@ -106,7 +106,7 @@ function RegisterPage(){
                 <LabelInputContainer className="mb-4">
                     <Label htmlFor="email">Email Address</Label>
                     <Input
-                    className="text-black" 
+                    className="text-black"
                         id="email"
                         name="email"
                         placeholder="projectmayhem@fc.com"

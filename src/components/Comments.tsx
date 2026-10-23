@@ -1,17 +1,15 @@
 "use client";
 
-import { databases } from "@/models/client/config";
-import { commentCollection, db } from "@/models/name";
+import apiFetch, { readError } from "@/lib/apiFetch";
 import { useAuthStore } from "@/store/Auth";
 import { cn } from "@/lib/utils"
 import convertDateToRelativeTime from "@/utils/relativeTime";
 import slugify from "@/utils/slugify";
 import { IconTrash } from "@tabler/icons-react";
-import { ID, Models } from "appwrite";
+import { Models } from "appwrite";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import React, { useState } from "react";
-import { div } from "motion/react-client";
-import { Content } from "next/font/google";
 
 const Comments =({
     comments: _comments,
@@ -25,48 +23,62 @@ const Comments =({
     className?: string;
 })=>{
     const [comment,setComment] = useState(_comments)
+    // Take the server's copy whenever router.refresh() delivers a new one
+    const [serverComments, setServerComments] = useState(_comments)
+    if (_comments !== serverComments) {
+        setServerComments(_comments)
+        setComment(_comments)
+    }
     const [newComment,setNewComment] = useState("")
     const { user } = useAuthStore();
+    const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>)=>{
         e.preventDefault();
-        if(!newComment || !user) return;
+        if (!user) return router.push("/login");
+        if (!newComment.trim()) return;
 
         try {
-            const response = await databases.createDocument(db,commentCollection, ID.unique(),{
-                content: newComment,
-                authorId: user.$id,
-                type: type,
-                typeId: typeId,
-
+            const response = await apiFetch("/api/comment", {
+                method: "POST",
+                body: JSON.stringify({ content: newComment, type, typeId }),
             })
+            if (!response.ok) throw new Error(await readError(response, "Error creating comment"))
+            const data = await response.json()
 
             setNewComment(()=>"")
             setComment(prev=>({
                 total : prev.total +1,
-                documents : [{...response, author: user},...prev.documents],
+                documents : [
+                    {...data, author: {$id: user.$id, name: user.name, reputation: user.prefs?.reputation ?? 0}},
+                    ...prev.documents,
+                ],
             }));
-        } catch (error:any) {
-            window.alert(error?.message || "Error creating comment");
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Error creating comment");
         }
     }
 
     const deleteComment = async(commentId: string)=>{
         try {
-            await databases.deleteDocument(db,commentCollection, commentId)
+            const response = await apiFetch("/api/comment", {
+                method: "DELETE",
+                body: JSON.stringify({ commentId }),
+            })
+            if (!response.ok) throw new Error(await readError(response, "Error deleting comment"))
 
             setComment(prev=>({
                 total: prev.total-1,
                 documents: prev.documents.filter(comment=> comment.$id !== commentId)
             }))
-        } catch (error: any) {
-             window.alert(error?.message || "Error deleting comment");
+        } catch (error) {
+            window.alert(error instanceof Error ? error.message : "Error deleting comment");
         }
     }
 
     return (
         <div className={cn("flex flex-col gap-2 pl-4", className)}>
-            {_comments.documents.map(comment => (
+            {comment.documents.map(comment => (
                 <React.Fragment key={comment.$id}>
                     <hr className="border-white/40" />
                     <div className="flex gap-2">
